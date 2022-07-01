@@ -1,4 +1,8 @@
-# Nanopore Workflows
+# Nanopore workflow on UW's WildIris cluster
+
+# UNDER ACTIVE DEVELOPMENT to adapt to WildIris!!!!
+
+
 Various commands for handling Nanopore data.
 ![alt text](sequencing-animated.gif)
 
