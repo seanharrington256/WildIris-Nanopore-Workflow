@@ -7,7 +7,8 @@ Various commands for handling Nanopore data.
 ![alt text](sequencing-animated.gif)
 
 
-# Table of Contents
+# Table of Contents I NEED TO EDIT THIS
+
 * [Overview](https://github.com/Joseph7e/Nanopore-Workflow#Overview)  
     * [Basecalling](https://github.com/Joseph7e/Nanopore-Workflow#Basecalling)
     * [Read Processing](https://github.com/Joseph7e/Nanopore-Workflow#Assessing-and-filtering-Nanopore-Data)  
@@ -34,24 +35,44 @@ multiplexing 24 max.
 
 
 
-## Example data
- Here we provide some typical test data for nanopore analysis, lambda. Other examples datasets can be found in the SRA, see my other turorials to download this type of data.
-  https://www.ncbi.nlm.nih.gov/bioproject/PRJNA477342
-  
- 
- ```
- # download a lambda dataset
- wget https://www.dropbox.com/s/eml7z2d82n3k8lq/lambda.tar.gz?dl=0 -O lambda.tar.gz
+## Get the data and set up our session
+
+The data for this exercise are already on WildIris in the wy\_t3_2022 project directory. If you are not already logged in, do so.
+
+Make a new directory called "nanopore" in your home directory and copy the data there:
+
 ```
+mkdir ~/nanopore/
+cp -r /project/wy_t3_2022/example-nanopore-illumina/* ~/nanopore/
+```
+
+Note: if you are not in this workshop and want to run through this protocol, please contact me.
+
+
+Now we'll need to set up an interactive session so that we're not doing anything intensive on the login node. We'll also load up a module that contains a lot of the tools we'll use:
+
+```
+salloc -A wy_t3_2022 -t 0-05:00 --mem=10G --cpus-per-task=2
+module load gentools/1.0.0
+```
+
+Note that `gentools` is not a single piece of software, it is an environment on WildIris that contains several different programs that we are using in this tutorial.
+
+
+
+
 
 # Read processing
 ![read processing flowchart for nanopore and illumina data](read_processing_workflow.png)
 
 ## Basecalling
 
-Basecalling is typically run automatically on the sequencing instrument. FOr example the GirdIOn will run the Guppy basecaller as soon as the fast5s are produced. Note that the Guppy installation prodices corrrupted fastqs right now, fix that. The minion may use a different one. 
-  
-  
+Basecalling is typically run automatically on the sequencing instrument. For example the GirdIOn will run the Guppy basecaller as soon as the fast5s are produced. When using a MinION sequencer plugged into a standard Mac desktop, we have found basecalling to be very slow, and therefore would recommend running guppy on WildIris. This is still somewhat slow, but you can at least speed it up by giving it a large number of threads. The fastest way to run Guppy is on a GPU rather than a CPU, but WildIris does not currently have any GPU nodes (Teton, UW's other cluster does). 
+
+
+Our example data here are already basecalled, and so we will skip this step, but it is documented here for future reference.
+
+ 
 Manual: https://denbi-nanopore-training-course.readthedocs.io/en/latest/basecalling/basecalling.html
 Alternative Tools: Albacore, DeepNano-blitz, minKNOW, Chiron, Bonito
 Comparison of base callers: https://github.com/rrwick/Basecalling-comparison
@@ -84,15 +105,19 @@ fix_concatenated_fastqs -i <path_to_folder_of_fastqs>
 ```
 
 ## Trim adapters with porechop
-The porechop "check_reads" option removes the need to specify adapters. It will automatically check and detemrine which ones to remove.
+
+The porechop "check\_reads" option removes the need to specify adapters. It will automatically check and detemrine which ones to remove.
+
 ```
-porechop --check_reads 1000 -i raw_reads.fastq -o adapter_trimmed.fastq
+porechop --check_reads 1000 -i Kphil49844-ONT-1.fastq.gz -o adapter_trimmed.fastq
 ```
 
+
 ## Filter reads with filtlong
-This step is optional. I did not run it through my first attempts. 
+This step is optional. I did not run it through my first attempts.
+
 ```
-filtlong --min_mean_q 80 --min_length 2000 <adapter_trimmed.fastq> > filtered.fq
+filtlong --min_mean_q 80 --min_length 2000 adapter_trimmed.fastq > filtered.fq
 ```
 
 ## Read Assessment with Nanoplot
@@ -101,7 +126,7 @@ I usually run this on the raw reads and after any adapter/quality trimming. Run 
 
 
 ```
-NanoPlot --fastq <nanopore.fastq> --threads 24 -o <output-dir>
+NanoPlot --fastq filtered.fq --threads 2 -o nanoplot_out
 ```
 
 # Assemblies overview
@@ -118,8 +143,7 @@ Reads > 1kb an genome size of 130MB
 De Bruijn graph contigs were generated with Platanus
 
 ```
-canu -d canu-assembly -p filt genomeSize=3.5m -nanopore-raw nanopore-reads.fastq
-
+canu -d canu-assembly -p filt genomeSize=3.5m gnuplotTested=true useGrid=false -nanopore-raw filtered.fq
 ```
 
 ## Miniasm
@@ -271,4 +295,12 @@ quast.py miniasm.fasta
 
 
 step 1.) map the reads to the assembly
+
+
+
+
+- come back to repairing reads
+- Canu seems like it takes long and is set up in a dumb way to submit jobs
+
+
 
