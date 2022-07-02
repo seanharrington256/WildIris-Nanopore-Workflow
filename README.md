@@ -56,7 +56,7 @@ salloc -A wy_t3_2022 -t 0-05:00 --mem=10G --cpus-per-task=2
 module load gentools/1.0.0
 ```
 
-Note that `gentools` is not a single piece of software, it is an environment on WildIris that contains several different programs that we are using in this tutorial.
+Note that `gentools` is not a single piece of software, it is an environment on WildIris that contains several different programs that we are using in this tutorial. If you are running through this on a different cluster or your own computer, you'll have to either load up multiple modules or install all of these programs into your own conda environment.
 
 
 
@@ -142,32 +142,136 @@ Reads > 1kb an genome size of 130MB
 
 De Bruijn graph contigs were generated with Platanus
 
+
+Canu will take a little while, so let's create a new slurm script to run this. Either use `nano canu.slurm` to create and edit a file for this script, or do this by using Cyberduck to create a new file and then edit it in your tet editor of choice. Put the below into this slurm script -- replace `YOUR_EMAIL@EMAIL.com` with your actual email if you want to get notifications.
+
 ```
+#!/bin/bash
+
+#SBATCH --job-name canu
+#SBATCH -A wy_t3_2022
+#SBATCH -t 0-08:00
+#SBATCH --nodes=1
+#SBATCH --cpus-per-task=2
+#SBATCH --mem=10G
+#SBATCH --mail-type=ALL
+#SBATCH --mail-user=YOUR_EMAIL@EMAIL.com
+#SBATCH -e err_canu_%A.err
+#SBATCH -o std_canu_%A.out
+
+source ~/.bash_profile
+
+
+# load modules necessary
+module load gentools/1.0.0
+
+# Set working directory
+cd ~/nanopore/
+
+# Run canu
 canu -d canu-assembly -p filt genomeSize=3.5m gnuplotTested=true useGrid=false -nanopore-raw filtered.fq
 ```
 
+Once you've created and saved that file, submit the job:
+
+`sbatch canu.slurm`
+
+Check the status of the job once it's running:
+
+`squeue -u YOUR_USERNAME`
+
+
+
+
 ## Miniasm
+
+
+Make a new directory and enter it.
 
 ```
 mkdir miniasm_assembly
 cd miniasm_assembly
-sbatch ~/nanopore_assemble.sh ../adapter_trimmed_reads.fastq
 ```
+
+Then run minimap2 and miniasm:
+
+# THIS CURRENTLY DOESN'T WORK
+
+```
+#!/bin/bash
+
+#SBATCH --job-name miniasm
+#SBATCH -A wy_t3_2022
+#SBATCH -t 0-08:00
+#SBATCH --nodes=1
+#SBATCH --cpus-per-task=2
+#SBATCH --mem=10G
+#SBATCH --mail-type=ALL
+#SBATCH --mail-user=YOUR_EMAIL@EMAIL.com
+#SBATCH -e err_miniasm_%A.err
+#SBATCH -o std_miniasm_%A.out
+
+source ~/.bash_profile
+
+
+# load modules necessary
+module load gentools/1.0.0
+
+# Set working directory
+cd ~/nanopore/miniasm_assembly
+
+# Run miniasm
+
+
+minimap2 -x ava-ont ../adapter_trimmed.fastq ../adapter_trimmed.fastq | gzip -1 > mapped.paf.gz
+miniasm -f ../adapter_trimmed.fastq mapped.paf.gz > miniasm.gfa
+awk '/^S/{print ">"$2"\n"$3}' miniasm.gfa > miniasm.fasta
+```
+
 
 # Illumina and Nanopore Hybrid Assembly
 
 ### Hybrid Assembly w/ spades
 https://www.ncbi.nlm.nih.gov/pubmed/26589280
 Run this as a normal spades job but specify the --nanopore reads. Note that with low coverage data I found that the nanopore data does not significantly improve the assembly.
+
+
+Make yet another SLURM script
+
+
 ```
-sbatch /mnt/lustre/hcgs/joseph7e/scripts/GENOME_ASSEMBLY/hybrid_assembly_spades.sh <illumna-forward> <illumina-reverse> <illumina-unpaired> <nanopore-reads> <sample-name>
+#!/bin/bash
+
+#SBATCH --job-name spades_hyb
+#SBATCH -A wy_t3_2022
+#SBATCH -t 0-08:00
+#SBATCH --nodes=1
+#SBATCH --cpus-per-task=24
+#SBATCH --mem=10G
+#SBATCH --mail-type=ALL
+#SBATCH --mail-user=YOUR_EMAIL@EMAIL.com
+#SBATCH -e err_spades_hyb_%A.err
+#SBATCH -o std_spades_hyb_%A.out
+
+cd ~/nanopore
+
+module load gcc/11.2.0 spades/3.15.3
+
+forward='KphilA_CGCTCATT-AGGCGAAG_L001_R1_001.fastq.gz'
+reverse='KphilA_CGCTCATT-AGGCGAAG_L001_R2_001.fastq.gz'
+nanopore='Kphil49844-ONT-1.fastq.gz'
+
+spades.py -t 24 -1 $forward -2 $reverse --nanopore $nanopore  -o spades-hybrid-only -m 10 --only-assembler
 ```
+
+
+
 ### Hybrid Assembly w/ Masurca
 
 
 # Genome Assembly Polishing
 
-There are many routes you can take, and many programs to choose. We will be using three. An initial polishing of a nanopore assembly with annopore reads with racon. Further polishign using annopore reads with makon, and a final polishing of the assembly using illumina reads with pilon. You can do any combination of these tools, for example skip right to pilon. Try them all and compare the results!
+There are many routes you can take, and many programs to choose. We will be using three. An initial polishing of a nanopore assembly with nanopore reads with racon. Further polishing using nanopore reads with makon, and a final polishing of the assembly using illumina reads with pilon. You can do any combination of these tools, for example skip right to pilon. Try them all and compare the results!
 
 
 Racon
@@ -297,10 +401,21 @@ quast.py miniasm.fasta
 step 1.) map the reads to the assembly
 
 
-
+- Got up to Racon & Medaka (mostly)
 
 - come back to repairing reads
-- Canu seems like it takes long and is set up in a dumb way to submit jobs
+
+
+- Canu takes long and is set up in a dumb way to submit jobs
+	- check options Joe uses - genome size
+- for WildIris intro tutorial:
+	- add in editing of text files using bbedit/notepad++
+	- worker nodes don't inherit the loaded modules from the login node
+	- I use '.slurm' for my slurm scripts to make them easily identifiable
+	- useful shortcuts like ctrl+a, cd -, etc.	
+- prob don't need the scripts in the git repo - they're not setup for WildIris
+- Minimap returns empty file - what's UP???
+- Masurca has nothing for it - add or skip????
 
 
 
