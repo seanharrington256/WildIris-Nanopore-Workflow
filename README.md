@@ -152,8 +152,8 @@ Canu will take a little while, so let's create a new slurm script to run this. E
 #SBATCH -A wy_t3_2022
 #SBATCH -t 0-08:00
 #SBATCH --nodes=1
-#SBATCH --cpus-per-task=2
-#SBATCH --mem=10G
+#SBATCH --cpus-per-task=24
+#SBATCH --mem=32G
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=YOUR_EMAIL@EMAIL.com
 #SBATCH -e err_canu_%A.err
