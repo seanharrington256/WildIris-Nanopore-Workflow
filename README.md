@@ -169,7 +169,7 @@ module load gentools/1.0.0
 cd ~/nanopore/
 
 # Run canu
-canu -d canu-assembly -p filt genomeSize=3.5m gnuplotTested=true useGrid=false -nanopore-raw filtered.fq
+canu -d canu-assembly -p filt genomeSize=3.5m maxMemory=32 maxThreads=24 gnuplotTested=true useGrid=false -nanopore-raw filtered.fq
 ```
 
 Once you've created and saved that file, submit the job:
