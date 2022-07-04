@@ -1,29 +1,61 @@
 # Nanopore workflow on UW's WildIris cluster
 
 # UNDER ACTIVE DEVELOPMENT to adapt to WildIris!!!!
+- Notes for conversion:
+	- Still to run:
+		- check on racon
+		- medaka
+		- Pilon
+		- LINKS
+	- Canu - check options Joe uses
+	- don't need all scripts in the git repo - they're not setup for WildIris
+
+
+	- Masurca had no info - skip for now? Major pain to set up	
+	- Scipts we need:
+		- nanopore_fix_fastq.py
+		- bwa_index_and_mapV2.sh
+	- Minimap returns empty file - what's UP???
+	- Pilon and below is beyond me
+	- Joe's script for repairing reads hits error below - couldn't find documentation for other way, either. Assume both of these are based on using a folder of the reads that are not concatenated??:
+	
+```		
+		Traceback (most recent call last):
+		  File "/project/wy_t3_2022/fix_guppy_fastq.py", line 17, in <module>
+		    for line in open(fastq):
+		  File "/apps/u/opt/gentools/1.0.0/lib/python3.7/codecs.py", line 322, in decode
+		    (result, consumed) = self._buffer_decode(data, self.errors, final)
+		UnicodeDecodeError: 'utf-8' codec can't decode byte 0x8b in position 1: invalid 	start byte
+```
+
+
+		
+
+
 
 
 Various commands for handling Nanopore data.
 ![alt text](sequencing-animated.gif)
 
 
-# Table of Contents I NEED TO EDIT THIS
+# Table of Contents
 
-* [Overview](https://github.com/Joseph7e/Nanopore-Workflow#Overview)  
-    * [Basecalling](https://github.com/Joseph7e/Nanopore-Workflow#Basecalling)
-    * [Read Processing](https://github.com/Joseph7e/Nanopore-Workflow#Assessing-and-filtering-Nanopore-Data)  
-       * [Adapter Trimming](https://github.com/Joseph7e/Nanopore-Workflow#Trim-adapters-with-porechop) 
-       * [Filter Reads](https://github.com/Joseph7e/Nanopore-Workflow#Accessing-and-filtering-Nanopore-Data)  
-       * [Assessment of reads](https://github.com/Joseph7e/Nanopore-Workflow#Read-Assessment-with-Nanoplot)  
-    * [Nanopore-only Assembly](https://github.com/Joseph7e/Nanopore-Workflow#Assessing-and-filtering-Nanopore-Data)  
-       * [Canu](https://github.com/Joseph7e/Nanopore-Workflow#Accessing-and-filtering-Nanopore-Data)  
-       * [Miniasm](https://github.com/Joseph7e/Nanopore-Workflow#Trim-adapters-with-porechop) 
-    * [Assembly Polishing](https://github.com/Joseph7e/Nanopore-Workflow#Assessing-and-filtering-Nanopore-Data)
+* [Overview](https://github.com/seanharrington256/WildIris-Nanopore-Workflow#Overview)  
+* [Basecalling](https://github.com/seanharrington256/WildIris-Nanopore-Workflow#Basecalling)
+* [Read Processing](https://github.com/seanharrington256/WildIris-Nanopore-Workflow#Assessing-and-filtering-Nanopore-Data)  
+    * [Adapter Trimming](https://github.com/seanharrington256/WildIris-Nanopore-Workflow#Trim-adapters-with-porechop) 
+    * [Filter Reads](https://github.com/seanharrington256/WildIris-Nanopore-Workflow#Accessing-and-filtering-Nanopore-Data)  
+    * [Assessment of reads](https://github.com/seanharrington256/WildIris-Nanopore-Workflow#Read-Assessment-with-Nanoplot)  
+* [Nanopore-only Assembly](https://github.com/seanharrington256/WildIris-Nanopore-Workflow#Assessing-and-filtering-Nanopore-Data)  
+    * [Canu](https://github.com/seanharrington256/WildIris-Nanopore-Workflow#Accessing-and-filtering-Nanopore-Data)  
+    * [Miniasm](https://github.com/seanharrington256/WildIris-Nanopore-Workflow#Trim-adapters-with-porechop) 
+* [Illumina and Nanopore Hybrid Assembly](https://github.com/seanharrington256/WildIris-Nanopore-Workflow#Illumina-and-Nanopore-Hybrid-Assembly)
+* [Assembly Polishing](https://github.com/seanharrington256/WildIris-Nanopore-Workflow#Assessing-and-filtering-Nanopore-Data)
 
 # Overview
 
 How data was produced etc.  
-We will use Illumina data in some instances throughout this tutorial (hybrid-assembly, polishing, and assessment). You'll want to run adapter trimming on the illumina reads prior to using them in any instance. IN addition, you will need an illumina-only assembly for the quality assessment of the nanopore assemblies. FOllow my main genome assembly tutorial to produce a high quality assembly and to determine information such as insert size and estimated genome size.  
+We will use Illumina data in some instances throughout this tutorial (hybrid-assembly, polishing, and assessment). You'll want to run adapter trimming on the illumina reads prior to using them in any instance. In addition, you will need an illumina-only assembly for the quality assessment of the nanopore assemblies. FOllow my main genome assembly tutorial to produce a high quality assembly and to determine information such as insert size and estimated genome size.  
 
 ## Sample Preperation and Sequencing
 
@@ -60,8 +92,6 @@ Note that `gentools` is not a single piece of software, it is an environment on 
 
 
 
-
-
 # Read processing
 ![read processing flowchart for nanopore and illumina data](read_processing_workflow.png)
 
@@ -77,6 +107,8 @@ Manual: https://denbi-nanopore-training-course.readthedocs.io/en/latest/basecall
 Alternative Tools: Albacore, DeepNano-blitz, minKNOW, Chiron, Bonito
 Comparison of base callers: https://github.com/rrwick/Basecalling-comparison
 
+**Again, we're skipping this step** because our data are already base called.
+
 ```
 # basecalling with guppy
 guppy_basecaller -i <inputdir> -s <output_dir> --flowcell FLO-MIN106 --kit SQK-LSK109 –fast5_out -r -t 15
@@ -86,13 +118,13 @@ guppy_basecaller -i <inputdir> -s <output_dir> --flowcell FLO-MIN106 --kit SQK-L
 ### Repair corrupted read files produced with guppy
 
 
-The fastq files need to be decompressed for both methods. For my custom workflow, the column for the sort program must match up with the order the fastq was produced (the numbers in the filename). Be sure to test that this works properly.
+The fastq files need to be decompressed for both methods. For Joe's custom workflow, the column for the sort program must match up with the order the fastq was produced (the numbers in the filename). Be sure to test that this works properly.
 
 #### Joes' custom method.
 ```
-cd <fastq_directory>
-ls *.fastq | sort -t'_' -k2 -n | xargs cat - > ../raw_reads.fastq
-/mnt/lustre/hcgs/joseph7e/scripts/nanopore_fix_fastq.py <fastq_from_above> > <fixed.fastq>
+cd ~/nanopore
+# ls *.fastq | sort -t'_' -k2 -n | xargs cat - > raw_reads_prepped.fastq  # This line is only needed when your reads are in multiple files - make sure this only includes nanopore reads if you run it
+python /project/wy_t3_2022/fix_guppy_fastq.py Kphil49844-ONT-1.fastq.gz > fixed_Kphil49844-ONT-1.fastq.gz
 ```
 
 #### Nanopore community way
@@ -236,7 +268,7 @@ https://www.ncbi.nlm.nih.gov/pubmed/26589280
 Run this as a normal spades job but specify the --nanopore reads. Note that with low coverage data I found that the nanopore data does not significantly improve the assembly.
 
 
-Make yet another SLURM script
+Make yet another SLURM script, `spades_hyb.slurm`
 
 
 ```
@@ -247,7 +279,7 @@ Make yet another SLURM script
 #SBATCH -t 0-08:00
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=24
-#SBATCH --mem=10G
+#SBATCH --mem=32G
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=YOUR_EMAIL@EMAIL.com
 #SBATCH -e err_spades_hyb_%A.err
@@ -261,12 +293,20 @@ forward='KphilA_CGCTCATT-AGGCGAAG_L001_R1_001.fastq.gz'
 reverse='KphilA_CGCTCATT-AGGCGAAG_L001_R2_001.fastq.gz'
 nanopore='Kphil49844-ONT-1.fastq.gz'
 
-spades.py -t 24 -1 $forward -2 $reverse --nanopore $nanopore  -o spades-hybrid-only -m 10 --only-assembler
+spades.py -t 24 -1 $forward -2 $reverse --nanopore $nanopore  -o spades-hybrid-only -m 30 --only-assembler
+```
+
+Submit the job and check on it:
+
+```
+sbatch spades_hyb.slurm.slurm
+squeue -u YOUR_USERNAME
 ```
 
 
-
 ### Hybrid Assembly w/ Masurca
+
+Masurca is another assembler that we can use for hyrbid assembly. Masurca requires a config file that specifies the parameters to run it. Full documentation is here: [https://github.com/alekseyzimin/masurca](https://github.com/alekseyzimin/masurca). We won't use this right now, but know that this is an option.
 
 
 # Genome Assembly Polishing
@@ -293,19 +333,40 @@ Racon takes as input only three files: contigs in FASTA/FASTQ format, reads in F
   
 The medaka documentation advises to do four rounds with racon before polishing with medaka, since medaka has been trained with racon polished assemblies. We need to iterate all the steps four times.
 
+Create a slurm script called `racon.slurm`:
+
 ```
+#!/bin/bash
+
+#SBATCH --job-name racon
+#SBATCH -A wy_t3_2022
+#SBATCH -t 0-08:00
+#SBATCH --nodes=1
+#SBATCH --cpus-per-task=24
+#SBATCH --mem=16G
+#SBATCH --mail-type=ALL
+#SBATCH --mail-user=YOUR_EMAIL@EMAIL.com
+#SBATCH -e err_racon_%A.err
+#SBATCH -o std_racon_%A.out
+
+# set the working directory
+cd ~/nanopore
+
+# Load up modules
+module load gentools/1.0.0 gcc/11.2.0 bwa/0.7.17
+
 # starting data
-genome=canu-assembly.fasta 
-nanopore_reads=../../filtered_1000_80.fastq
+genome=canu-assembly/filt.contigs.fasta
+nanopore_reads=filtered.fq
 
 # index genome
 bwa index $genome
 
 # map ont reads to assembly
-bwa mem -t 24 -x ont2d $genome $nanopore_reads > mapping-filteredONT.sam
+bwa mem -t 2 -x ont2d $genome $nanopore_reads > mapping-filteredONT.sam
 
 # polish with racon and produce new consensus sequence
-racon -m 8 -x -6 -g -8 -w 500 -t 24 $nanopore_reads mapping-filteredONT.sam <genome.fasta> > racon.fasta
+racon -m 8 -x -6 -g -8 -w 500 -t 24 $nanopore_reads mapping-filteredONT.sam $genome > racon.fasta
 
 # repeat (2)
 bwa index racon.fasta
@@ -325,13 +386,29 @@ racon -m 8 -x -6 -g -8 -w 500 -t 24 $nanopore_reads mapping-filteredONT4.sam rac
 # clean up all the iterations
 ```
 
+Submit it and check that it's running:
+
+```
+sbatch racon.slurm
+squeue -u YOUR_USERNAME
+```
+
+
 ## Medaka
 
+When this finishes, we can then feed the final assembly into Medaka:
+
+```
+medaka_consensus -i Kphil49844-ONT-1.fastq.gz -d racon-round4.fasta -o medaka_out -t 24 -m r941_min_high_g303
+```
 
 ## Pilon
-Here we will polish an assembly using Illumina reads. You can do this right away, or after the racon/medaka polishing.
+
+Here we will polish an assembly using Illumina reads. You can do this right away, or after the racon/medaka polishing. We'll demonstrate this on the unpolished assembly so that we can start this up now:
+
   
 #### Step 1: Map Illumina reads to Assembly/Read FASTA.
+
 The script below outputs a lot of extra (useful) data. We only need the mapping file.
 ```
 sbatch ~/scripts/bwa_index_and_mapV2.sh <reference.fasta> <forward_reads> <reverse_reads> <sample_name>
@@ -401,21 +478,6 @@ quast.py miniasm.fasta
 step 1.) map the reads to the assembly
 
 
-- Got up to Racon & Medaka (mostly)
-
-- come back to repairing reads
-
-
-- Canu takes long and is set up in a dumb way to submit jobs
-	- check options Joe uses - genome size
-- for WildIris intro tutorial:
-	- add in editing of text files using bbedit/notepad++
-	- worker nodes don't inherit the loaded modules from the login node
-	- I use '.slurm' for my slurm scripts to make them easily identifiable
-	- useful shortcuts like ctrl+a, cd -, etc.	
-- prob don't need the scripts in the git repo - they're not setup for WildIris
-- Minimap returns empty file - what's UP???
-- Masurca has nothing for it - add or skip????
 
 
 
