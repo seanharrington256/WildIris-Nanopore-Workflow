@@ -3,33 +3,15 @@
 # UNDER ACTIVE DEVELOPMENT to adapt to WildIris!!!!
 - Notes for conversion:
 	- Still to run:
-		- check on racon
-		- medaka
-		- Pilon
+		- check on Pilon output - running now, see if runs out of mem
 		- LINKS
 	- Canu - check options Joe uses
 	- don't need all scripts in the git repo - they're not setup for WildIris
 
+	- Minimap returns empty file - what's UP???
 
-	- Masurca had no info - skip for now? Major pain to set up	
 	- Scipts we need:
 		- nanopore_fix_fastq.py
-		- bwa_index_and_mapV2.sh
-	- Minimap returns empty file - what's UP???
-	- Pilon and below is beyond me
-	- Joe's script for repairing reads hits error below - couldn't find documentation for other way, either. Assume both of these are based on using a folder of the reads that are not concatenated??:
-	
-```		
-		Traceback (most recent call last):
-		  File "/project/wy_t3_2022/fix_guppy_fastq.py", line 17, in <module>
-		    for line in open(fastq):
-		  File "/apps/u/opt/gentools/1.0.0/lib/python3.7/codecs.py", line 322, in decode
-		    (result, consumed) = self._buffer_decode(data, self.errors, final)
-		UnicodeDecodeError: 'utf-8' codec can't decode byte 0x8b in position 1: invalid 	start byte
-```
-
-
-		
 
 
 
@@ -118,20 +100,18 @@ guppy_basecaller -i <inputdir> -s <output_dir> --flowcell FLO-MIN106 --kit SQK-L
 ### Repair corrupted read files produced with guppy
 
 
-The fastq files need to be decompressed for both methods. For Joe's custom workflow, the column for the sort program must match up with the order the fastq was produced (the numbers in the filename). Be sure to test that this works properly.
+**The fastq files need to be decompressed for both methods**. For Joe's custom workflow, the column for the sort program must match up with the order the fastq was produced (the numbers in the filename). Be sure to test that this works properly.
 
 #### Joes' custom method.
 ```
 cd ~/nanopore
 # ls *.fastq | sort -t'_' -k2 -n | xargs cat - > raw_reads_prepped.fastq  # This line is only needed when your reads are in multiple files - make sure this only includes nanopore reads if you run it
-python /project/wy_t3_2022/fix_guppy_fastq.py Kphil49844-ONT-1.fastq.gz > fixed_Kphil49844-ONT-1.fastq.gz
+python /project/wy_t3_2022/fix_guppy_fastq.py raw_reads_prepped.fastq > fixed_raw_reads.fastq.gz
 ```
 
 #### Nanopore community way
 https://community.nanoporetech.com/posts/fastq-errors-on-gridion-an
 ```
-pip install ont-fastq-deconcatenate
-apt-get update && apt-get install python3-pip
 pip3 install ont-fastq-deconcatenate
 fix_concatenated_fastqs -i <path_to_folder_of_fastqs>
 ```
@@ -306,7 +286,72 @@ squeue -u YOUR_USERNAME
 
 ### Hybrid Assembly w/ Masurca
 
-Masurca is another assembler that we can use for hyrbid assembly. Masurca requires a config file that specifies the parameters to run it. Full documentation is here: [https://github.com/alekseyzimin/masurca](https://github.com/alekseyzimin/masurca). We won't use this right now, but know that this is an option.
+Masurca is another assembler that we can use for hyrbid assembly. Masurca requires a config file that specifies the parameters to run it. Full documentation is here: [https://github.com/alekseyzimin/masurca](https://github.com/alekseyzimin/masurca).
+
+Let's start by making a config file called `masurca_config.txt`. **Note that here you have to use the full, absolute path to the data files and cannot use ~, you will need to edit this to your specific paths**
+
+```
+DATA
+PE= pe 500 50  /FULL/PATH_TO/nanopore/KphilA_CGCTCATT-AGGCGAAG_L001_R1_001.fastq.gz /FULL/PATH_TO/nanopore/KphilA_CGCTCATT-AGGCGAAG_L001_R2_001.fastq.gz
+NANOPORE=/FULL/PATH_TO/nanopore/Kphil49844-ONT-1.fastq.gz
+END
+
+PARAMETERS
+NUM_THREADS=16
+JF_SIZE=2000000000
+USE_LINKING_MATES=0
+GRAPH_KMER_SIZE=auto
+SOAP_ASSEMBLY = 0
+END
+```
+
+
+Then, run the Masurca script, which itself generates an executable script to run the actual assembly:
+
+```
+module load gentools
+masurca masurca_config.txt
+```
+
+Make a new directory to run that file from and move it there:
+
+```
+mkdir masurca_out
+mv assemble.sh masurca_out
+```
+
+
+Then we can make a slurm script called `masurca.slurm` to submit that executable script as a job:
+
+
+```
+#!/bin/bash
+
+#SBATCH --job-name masurca
+#SBATCH -A wy_t3_2022
+#SBATCH -t 0-08:00
+#SBATCH --nodes=1
+#SBATCH --cpus-per-task=16
+#SBATCH --mem=32G
+#SBATCH --mail-type=ALL
+#SBATCH --mail-user=YOUR_EMAIL@EMAIL.com
+#SBATCH -e err_masurca_%A.err
+#SBATCH -o std_masurca_%A.out
+
+cd ~/nanopore/masurca_out
+
+module load gentools
+
+./assemble.sh
+```
+
+Submit it and check that it's running:
+
+```
+sbatch masurca.slurm
+squeue -u YOUR_USERNAME
+```
+
 
 
 # Genome Assembly Polishing
@@ -363,7 +408,7 @@ nanopore_reads=filtered.fq
 bwa index $genome
 
 # map ont reads to assembly
-bwa mem -t 2 -x ont2d $genome $nanopore_reads > mapping-filteredONT.sam
+bwa mem -t 24 -x ont2d $genome $nanopore_reads > mapping-filteredONT.sam
 
 # polish with racon and produce new consensus sequence
 racon -m 8 -x -6 -g -8 -w 500 -t 24 $nanopore_reads mapping-filteredONT.sam $genome > racon.fasta
@@ -374,16 +419,15 @@ bwa mem -t 24 -x ont2d racon.fasta $nanopore_reads > mapping-filteredONT2.sam
 racon -m 8 -x -6 -g -8 -w 500 -t 24 $nanopore_reads mapping-filteredONT2.sam racon.fasta > racon_round2.fasta
 
 # repeat (3)
-bwa index racon.fasta
-bwa mem -t 24 -x ont2d racon2.fasta $nanopore_reads > mapping-filteredONT3.sam
-racon -m 8 -x -6 -g -8 -w 500 -t 24 $nanopore_reads mapping-filteredONT3.sam racon2.fasta > racon_round3.fasta
+bwa index racon_round2.fasta
+bwa mem -t 24 -x ont2d racon_round2.fasta $nanopore_reads > mapping-filteredONT3.sam
+racon -m 8 -x -6 -g -8 -w 500 -t 24 $nanopore_reads mapping-filteredONT3.sam racon_round2.fasta > racon_round3.fasta
 
 # repeat (4)
-bwa index racon.fasta
-bwa mem -t 24 -x ont2d racon3.fasta $nanopore_reads > mapping-filteredONT4.sam
-racon -m 8 -x -6 -g -8 -w 500 -t 24 $nanopore_reads mapping-filteredONT4.sam racon3.fasta > racon-round4.fasta
+bwa index racon_round3.fasta
+bwa mem -t 24 -x ont2d racon_round3.fasta $nanopore_reads > mapping-filteredONT4.sam
+racon -m 8 -x -6 -g -8 -w 500 -t 24 $nanopore_reads mapping-filteredONT4.sam racon_round3.fasta > racon-round4.fasta
 
-# clean up all the iterations
 ```
 
 Submit it and check that it's running:
@@ -396,60 +440,95 @@ squeue -u YOUR_USERNAME
 
 ## Medaka
 
-When this finishes, we can then feed the final assembly into Medaka:
+When this finishes, we can then feed the final assembly into Medaka, in a slurm script called `medaka.slurm`:
 
 ```
+#!/bin/bash
+
+#SBATCH --job-name medaka
+#SBATCH -A wy_t3_2022
+#SBATCH -t 0-08:00
+#SBATCH --nodes=1
+#SBATCH --cpus-per-task=24
+#SBATCH --mem=16G
+#SBATCH --mail-type=ALL
+#SBATCH --mail-user=YOUR_EMAIL@EMAIL.com
+#SBATCH -e err_medaka_%A.err
+#SBATCH -o std_medaka_%A.out
+#SBATCH --partition=wildiris-phys
+
+# load modules
+module load gentools samtools bcftools
+
+# move to the right directory
+cd ~/nanopore
+
+# run medaka
 medaka_consensus -i Kphil49844-ONT-1.fastq.gz -d racon-round4.fasta -o medaka_out -t 24 -m r941_min_high_g303
 ```
+* Note that we had to add `--partition=wildiris-phys` to specify that medaka should be run on a physical and not virtual node. Don't worry too much about what this means, it has to do with specifics of medaka and WildIris that won't typically apply.
+
+
+Submit it and check that it's running:
+
+```
+sbatch medaka.slurm
+squeue -u YOUR_USERNAME
+```
+
+
 
 ## Pilon
 
 Here we will polish an assembly using Illumina reads. You can do this right away, or after the racon/medaka polishing. We'll demonstrate this on the unpolished assembly so that we can start this up now:
 
   
-#### Step 1: Map Illumina reads to Assembly/Read FASTA.
-
-The script below outputs a lot of extra (useful) data. We only need the mapping file.
-```
-sbatch ~/scripts/bwa_index_and_mapV2.sh <reference.fasta> <forward_reads> <reverse_reads> <sample_name>
-mkdir assembly_ploshing && cd assembly_polishing
-mv ../bwa_mapping*/sorted_mapped.bam* ./
-```
-
-#### Step 2: Prepare genome chunks for array job.
-```
-grep ">" <assembly.fasta> \
-| tr -d ">" \
-| shuf \
-| split -d -l 200 - genomechunk.
-rename genomechunk.0 genomechunk. genomechunk.0*
-mkdir pilon
-mv genomechunk* pilon/
-```
-
-#### Step 3: Edit pilon script and run pilon
-At this point you should be in a directory with four files. One mapping file with its index, a directory named pilon (which contains all genome chunk data), and a copy or symlink of your reference assembly.
-```
-# copy over generic slurm script
-cp ~/scripts/nanopore_pilon.slurm pilon.slurm
-```
-You need to edit a few things in this script.
-#SBATCH --array=0-X%8 (change X to equal the number of genome chunks found in pilon dir.
-genome="YOUR GENOME FILE HERE"
---frags "NAME OF MAPPING FILE HERE"
+#### Step 1: Map Illumina reads to Assembly/Read FASTA. This should look familiar from the Illumina-only tutorial.
 
 ```
-sbatch ./pilon.slurm
+# load modules
+module load gcc bwa
+# index the canu assembly with bwa
+bwa index canu-assembly/filt.contigs.fasta 
+# map the illumina reads to the canu assembly
+bwa mem -t 2 canu-assembly/filt.contigs.fasta ~/nanopore/KphilA_CGCTCATT-AGGCGAAG_L001_R1_001.fastq.gz ~/nanopore/KphilA_CGCTCATT-AGGCGAAG_L001_R2_001.fastq.gz > mapped_to_canu.sam
+# Remove sequencing reads that did not match to the assembly and convert the SAM to a BAM.
+samtools view -@ 2 -Sb  mapped_to_canu.sam  | samtools sort -@ 2 - sorted_mapped_canu
+# index the new bam file
+samtools index sorted_mapped_canu.bam
 ```
 
-#### Step 4: View logs and concatenate polished genome
+
+#### Step 2: Set up the slurm script to submit the job:
+
+Make a slurm script `pilon.slurm`:
+
 ```
-mkdir logs_pilon
-mv *.log logs_pilon
-cat pilon/*.fasta > polished_genome.fasta
+#!/bin/bash
+
+#SBATCH --job-name pilon
+#SBATCH -A wy_t3_2022
+#SBATCH -t 0-08:00
+#SBATCH --nodes=1
+#SBATCH --cpus-per-task=2
+#SBATCH --mem=0
+#SBATCH --mail-type=ALL
+#SBATCH --mail-user=YOUR_EMAIL@EMAIL.com
+#SBATCH -e err_pilon_%A.err
+#SBATCH -o std_pilon_%A.out
+
+# load modules
+module load gentools
+
+# move to the right directory
+cd ~/nanopore
+
+# run pilon
+pilon --genome canu-assembly/filt.contigs.fasta --bam sorted_mapped_canu.bam --outdir pilon_out
 ```
 
-#### Step 5: Rinse and repeat
+
+#### Step 3: Rinse and repeat
 Repeat the entire process on the newly polished genome. Then again and agin, until you're happy.
 
 
@@ -466,6 +545,8 @@ LINKS -f hybrid_assembly_fixed.fasta  -s <txt_file_with_nanopore_read_paths> -b 
 sbatch ~/nanopore_LINKS.sh <assembly> <nanopore_reads>
 ```
 ## Assembly Assessment Scripts
+
+
 Quast for contiguity, BUSCO for completness, BWA for quality and correctness.
 ```
 quast.py miniasm.fasta
