@@ -3,15 +3,11 @@
 # UNDER ACTIVE DEVELOPMENT to adapt to WildIris!!!!
 - Notes for conversion:
 	- Still to run:
-		- check on Pilon output - running now, see if runs out of mem
-		- LINKS
+		- Pilon runs out of memory
 	- Canu - check options Joe uses
 	- don't need all scripts in the git repo - they're not setup for WildIris
 
-	- Minimap returns empty file - what's UP???
-
-	- Scipts we need:
-		- nanopore_fix_fastq.py
+	- Minimap running now with more memory
 
 
 
@@ -216,8 +212,8 @@ Then run minimap2 and miniasm:
 #SBATCH -A wy_t3_2022
 #SBATCH -t 0-08:00
 #SBATCH --nodes=1
-#SBATCH --cpus-per-task=2
-#SBATCH --mem=10G
+#SBATCH --cpus-per-task=24
+#SBATCH --mem=32G
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=YOUR_EMAIL@EMAIL.com
 #SBATCH -e err_miniasm_%A.err
@@ -510,7 +506,7 @@ Make a slurm script `pilon.slurm`:
 #SBATCH -A wy_t3_2022
 #SBATCH -t 0-08:00
 #SBATCH --nodes=1
-#SBATCH --cpus-per-task=2
+#SBATCH --cpus-per-task=1
 #SBATCH --mem=0
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=YOUR_EMAIL@EMAIL.com
@@ -532,22 +528,53 @@ pilon --genome canu-assembly/filt.contigs.fasta --bam sorted_mapped_canu.bam --o
 Repeat the entire process on the newly polished genome. Then again and agin, until you're happy.
 
 
-
+This may require splitting the job up into smaller chunks or running on a system with more memory.
 
 
 
 ## Scaffolding w/ LINKS
-Note that this process requires a ton of memory. Maybe use a high memory node or used a reduced set of reads.
+Note that this process also requires a ton of memory. Maybe use a reduced set of reads or run on a high memory node on a different system if this doesn't run.
+
+
+LINKS takes a "file of filenames" (.fof) file as the input specifying the Nanopore reads file. Let's make this real quick:
+
 ```
-LINKS -f hybrid_assembly_fixed.fasta  -s <txt_file_with_nanopore_read_paths> -b <output_base>
+# this again has to be a full path that does not include "~"
+readlink -f ~/nanopore/Kphil49844-ONT-1.fastq.gz > nanopore_reads.fof
 ```
+
+Then use that to run LINKS, again with a SLURM script, this time called `links.slurm`:
+
 ```
-sbatch ~/nanopore_LINKS.sh <assembly> <nanopore_reads>
+#!/bin/bash
+
+#SBATCH --job-name links
+#SBATCH -A wy_t3_2022
+#SBATCH -t 0-08:00
+#SBATCH --nodes=1
+#SBATCH --cpus-per-task=1
+#SBATCH --mem=0
+#SBATCH --mail-type=ALL
+#SBATCH --mail-user=YOUR_EMAIL@EMAIL.com
+#SBATCH -e err_links_%A.err
+#SBATCH -o std_links_%A.out
+
+# load modules
+module load gentools
+
+# move to the right directory
+cd ~/nanopore
+
+# run links
+LINKS -f canu-assembly/filt.contigs.fasta -s nanopore_reads.fof -b out_links
 ```
+
+
 ## Assembly Assessment Scripts
 
 
 Quast for contiguity, BUSCO for completness, BWA for quality and correctness.
+
 ```
 quast.py miniasm.fasta
 ~/scripts/quality_check__genome_busco.sh <assembly.fasta>
